@@ -26,24 +26,42 @@
 
         hsPkgs = pkgs.haskell.packages.${compiler}.override {
           overrides = hfinal: hprev: {
-            cornelis = hfinal.callCabal2nix "cornelis" ./. { };
             nvim-hs = hfinal.callPackage ./nix/deps/nvim-hs.nix { };
           };
         };
+
+        cornelis = returnShellEnv: hsPkgs.developPackage {
+          inherit returnShellEnv;
+          root = builtins.path { path = ./.; name = "cornelis"; };
+          name = "cornelis";
+          modifier = drv:
+            pkgs.haskell.lib.addBuildTools drv
+              (
+                pkgs.lib.lists.optionals returnShellEnv [
+                  hsPkgs.cabal-install
+                  hsPkgs.haskell-language-server
+                ]
+              );
+        };
       in
-      rec {
+      {
         packages = flake-utils.lib.flattenTree {
-          cornelis = hsPkgs.cornelis;
+          cornelis = cornelis false;
           cornelis-vim = pkgs.vimUtils.buildVimPlugin {
             name = "cornelis";
             src = ./.;
           };
         };
+        defaultPackage = self.packages.cornelis;
 
-        defaultPackage = packages.cornelis;
         app = {
-          cornelis = flake-utils.lib.mkApp { name = "cornelis"; drv = packages.cornelis; };
+          cornelis = flake-utils.lib.mkApp {
+            name = "cornelis";
+            drv = self.packages.cornelis;
+          };
         };
-        defaultApp = app.cornelis;
+        defaultApp = self.app.cornelis;
+
+        devShell = cornelis true;
       });
 }
